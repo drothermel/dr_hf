@@ -95,11 +95,9 @@ def __getattr__(name: str):
     checkpoint_exports = {
         "analyze_complete_checkpoint",
         "analyze_optimizer_checkpoint",
-        "analyze_optimizer_component",
         "create_comprehensive_summary",
         "create_learning_rate_summary",
         "download_optimizer_checkpoint",
-        "extract_learning_rate_info",
         "process_all_checkpoints",
         "process_single_checkpoint",
         "save_all_analyses_outputs",
@@ -109,5 +107,24 @@ def __getattr__(name: str):
         from . import checkpoints
 
         return getattr(checkpoints, name)
+
+    model_exports = {
+        "ArchitectureInfo",
+        "CheckpointAnalysis",
+        "CheckpointComponents",
+        "CheckpointSummaryRow",
+        "ConfigAnalysis",
+        "LearningRateInfo",
+        "OptimizerAnalysis",
+        "OptimizerComponentInfo",
+        "ParamGroupInfo",
+        "ParameterEstimate",
+        "WeightsAnalysis",
+        "WeightsSummary",
+    }
+    if name in model_exports:
+        from . import models
+
+        return getattr(models, name)
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
