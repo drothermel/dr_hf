@@ -1,0 +1,71 @@
+[project]
+name = "dr-hf"
+version = "0.1.0"
+description = "HuggingFace utilities for repository management, dataset operations, and model analysis"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Danielle Rothermel", email = "danielle.rothermel@gmail.com" }
+]
+requires-python = ">=3.12"
+keywords = ["huggingface", "datasets", "model-analysis", "checkpoints", "machine-learning"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "huggingface_hub>=0.20.0",
+    "datasets>=2.0.0",
+    "pandas>=2.0.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+weights = ["torch>=2.0.0", "safetensors>=0.4.0"]
+duckdb = ["duckdb>=0.9.0"]
+all = ["torch>=2.0.0", "safetensors>=0.4.0", "duckdb>=0.9.0"]
+
+[project.urls]
+Homepage = "https://github.com/drothermel/dr_hf"
+Repository = "https://github.com/drothermel/dr_hf"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dr_hf"]
+
+[dependency-groups]
+dev = [
+    "duckdb>=0.9.0",
+    "pytest>=8.4.1",
+    "ruff>=0.9.0",
+    "safetensors>=0.4.0",
+    "torch>=2.0.0",
+    "ty>=0.0.14",
+]
+
+[tool.ruff]
+include = [
+    "src/**/*.py",
+    "tests/**/*.py",
+]
+line-length = 88
+cache-dir = ".ruff_cache"
+exclude = ["outputs/*", "notebooks/*", "data/*"]
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
