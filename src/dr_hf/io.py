@@ -54,11 +54,18 @@ def query_hf_with_duckdb(
     resolved_paths = hf_loc.resolve_filepaths()
     hf_uris = hf_loc.get_uris_for_files(resolved_paths, ignore_cfg_files=True)
     results: dict[str, pd.DataFrame] = {}
-    for filepath, uri in zip(resolved_paths, hf_uris, strict=False):
-        hf_id = uri.removeprefix("hf://")
-        results[Path(filepath).stem] = connection.execute(
-            f"SELECT * FROM '{hf_id}'"
-        ).df()
+    try:
+        for filepath, uri in zip(resolved_paths, hf_uris, strict=True):
+            hf_id = uri.removeprefix("hf://")
+            results[Path(filepath).stem] = connection.execute(
+                f"SELECT * FROM '{hf_id}'"
+            ).df()
+    except ValueError as e:
+        raise ValueError(
+            f"Mismatch between resolved_paths ({len(resolved_paths)} items) and "
+            f"hf_uris from hf_loc.get_uris_for_files ({len(hf_uris)} items). "
+            f"resolved_paths: {resolved_paths}"
+        ) from e
     return results
 
 

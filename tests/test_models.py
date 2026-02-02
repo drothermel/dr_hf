@@ -60,6 +60,7 @@ def test_config_analysis() -> None:
     )
     cfg = ConfigAnalysis(available=True, architecture_info=arch)
     assert cfg.available
+    assert cfg.architecture_info is not None
     assert cfg.architecture_info.hidden_size == 768
 
 
@@ -72,6 +73,7 @@ def test_weights_analysis() -> None:
     wgt = WeightsAnalysis(available=True, summary=summary)
     assert wgt.available
     assert wgt.weights_available
+    assert wgt.summary is not None
     assert wgt.summary.total_parameters_millions == 1.0
     assert wgt.summary.total_parameters_billions == 0.001
     assert wgt.summary.total_size_gb == 0.098

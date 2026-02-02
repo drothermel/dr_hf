@@ -9,8 +9,6 @@ from typing import Any
 import pandas as pd
 from huggingface_hub import hf_hub_download
 
-logger = logging.getLogger(__name__)
-
 from ._torch import get_torch
 from .branches import extract_step_from_branch, get_checkpoint_branches
 from .configs import analyze_model_config, download_config_file
@@ -26,6 +24,8 @@ from .models import (
     WeightsAnalysis,
 )
 from .weights import analyze_model_weights
+
+logger = logging.getLogger(__name__)
 
 
 def download_optimizer_checkpoint(

@@ -70,10 +70,10 @@ class HFLocation(BaseModel):
         if not isinstance(uri, str):
             raise TypeError("HF URI must be a non-empty string.")
         if not uri:
-            raise ValueError("HF URI must be a non-empty string.")
+            raise AssertionError("HF URI must be a non-empty string.")
         prefix = cls.uri_prefix
         if not uri.startswith(prefix):
-            raise ValueError(f"HF URI must start with '{prefix}'. Got: {uri!r}")
+            raise AssertionError(f"HF URI must start with '{prefix}'. Got: {uri!r}")
         stripped = uri[len(prefix) :]
 
         parts = [part for part in stripped.split("/") if part]

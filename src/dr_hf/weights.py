@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import re
 from typing import Any
 
 from huggingface_hub import hf_hub_download, list_repo_files
-
-logger = logging.getLogger(__name__)
 
 from ._torch import get_torch
 from .models import (
@@ -22,6 +21,8 @@ from .models import (
     WeightsAnalysis,
     WeightsSummary,
 )
+
+logger = logging.getLogger(__name__)
 
 _safetensors_available: bool = False
 
@@ -254,7 +255,6 @@ def analyze_layer_structure(weights: dict[str, Any]) -> LayerAnalysis:
 
 def calculate_global_weight_stats(weights: dict[str, Any]) -> GlobalWeightStats | None:
     torch = get_torch()
-    import random
 
     try:
         # Welford's algorithm state for mean/variance

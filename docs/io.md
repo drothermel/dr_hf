@@ -58,7 +58,6 @@ Query a HuggingFace dataset directly using DuckDB. Requires a DuckDB connection 
 
 ```python
 from pathlib import Path
-import duckdb
 from dr_hf import (
     upload_file_to_hf,
     cached_download_tables_from_hf,
@@ -97,7 +96,8 @@ from dr_hf import get_tables_from_cache
 dfs = get_tables_from_cache(loc, cache_dir=Path("./cache"))
 # dfs is a dict: {"en/train-00000-of-01024": pd.DataFrame}
 
-# Query with DuckDB (requires [duckdb])
+# Query with DuckDB (requires [duckdb] optional dependency)
+import duckdb  # Optional: install with pip install dr-hf[duckdb]
 conn = duckdb.connect()
 loc = HFLocation.from_uri("hf://datasets/squad/squad")
 results = query_hf_with_duckdb(loc, conn)

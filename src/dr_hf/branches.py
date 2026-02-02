@@ -81,8 +81,13 @@ def get_step_range_for_seed(branches: list[str]) -> tuple[int, int]:
 
 def create_branch_metadata(repo_id: str) -> BranchMetadata:
     all_branches = get_all_repo_branches(repo_id)
-    checkpoint_branches = [b for b in all_branches if is_checkpoint_branch(b)]
-    other_branches = [b for b in all_branches if not is_checkpoint_branch(b)]
+    checkpoint_branches = []
+    other_branches = []
+    for branch in all_branches:
+        if is_checkpoint_branch(branch):
+            checkpoint_branches.append(branch)
+        else:
+            other_branches.append(branch)
 
     seed_groups = group_branches_by_seed(checkpoint_branches)
 
