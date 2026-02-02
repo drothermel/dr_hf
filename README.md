@@ -5,17 +5,17 @@ HuggingFace utilities for repository management, dataset operations, and model a
 ## Installation
 
 ```bash
-pip install dr-hf
+uv add dr-hf
 ```
 
 For model weight analysis (requires PyTorch):
 ```bash
-pip install dr-hf[weights]
+uv add dr-hf[weights]
 ```
 
 For DuckDB query support:
 ```bash
-pip install dr-hf[duckdb]
+uv add dr-hf[duckdb]
 ```
 
 ## Features
