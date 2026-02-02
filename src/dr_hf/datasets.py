@@ -22,6 +22,7 @@ def download_dataset(
     if force_reload or not path.exists():
         try:
             raw_ds: Dataset = load_dataset(repo_id, split=split)
+            path.parent.mkdir(parents=True, exist_ok=True)
             raw_ds.to_parquet(path)
         except Exception as e:
             logger.error(

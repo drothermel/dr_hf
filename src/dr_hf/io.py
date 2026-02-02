@@ -56,9 +56,8 @@ def query_hf_with_duckdb(
     results: dict[str, pd.DataFrame] = {}
     try:
         for filepath, uri in zip(resolved_paths, hf_uris, strict=True):
-            hf_id = uri.removeprefix("hf://")
             results[Path(filepath).stem] = connection.execute(
-                f"SELECT * FROM '{hf_id}'"
+                "SELECT * FROM read_parquet(?)", [uri]
             ).df()
     except ValueError as e:
         raise ValueError(
@@ -98,7 +97,7 @@ def cached_download_tables_from_hf(
             local_dir=hf_loc.build_local_dir(cache_path),
             force_download=force_download,
         )
-        tables[remote_path] = local_path
+        tables[Path(remote_path).stem] = local_path
 
     if verbose:
         print(f">> Downloaded {hf_loc.org}/{hf_loc.repo_name} tables:")
