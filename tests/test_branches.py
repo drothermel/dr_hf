@@ -25,17 +25,17 @@ def test_is_checkpoint_branch_invalid() -> None:
 
 def test_parse_branch_name_valid() -> None:
     result = parse_branch_name("step1000-seed-default")
-    assert result["valid"]
-    assert result["step"] == 1000
-    assert result["seed"] == "default"
-    assert result["branch"] == "step1000-seed-default"
+    assert result.valid
+    assert result.step == 1000
+    assert result.seed == "default"
+    assert result.branch == "step1000-seed-default"
 
 
 def test_parse_branch_name_invalid() -> None:
     result = parse_branch_name("main")
-    assert not result["valid"]
-    assert result["step"] is None
-    assert result["seed"] is None
+    assert not result.valid
+    assert result.step is None
+    assert result.seed is None
 
 
 def test_extract_step_from_branch() -> None:
