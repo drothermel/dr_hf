@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import os
 import re
-from types import ModuleType
 from typing import Any
 
 from huggingface_hub import hf_hub_download, list_repo_files
 
+from ._torch import get_torch
 from .models import (
     GlobalWeightStats,
     LayerAnalysis,
@@ -20,23 +20,7 @@ from .models import (
     WeightsSummary,
 )
 
-_torch: ModuleType | None = None
 _safetensors_available: bool = False
-
-
-def _get_torch() -> ModuleType:
-    global _torch
-    if _torch is None:
-        try:
-            import torch
-
-            _torch = torch
-        except ImportError as e:
-            raise ImportError(
-                "torch is required for weight analysis. "
-                "Install with: uv add dr-hf[weights]"
-            ) from e
-    return _torch
 
 
 def _check_safetensors() -> bool:
@@ -91,7 +75,7 @@ def download_model_weights(
 
 
 def calculate_weight_statistics(weight_path: str) -> WeightFileStatistics:
-    torch = _get_torch()
+    torch = get_torch()
 
     try:
         if weight_path.endswith(".safetensors"):
@@ -145,11 +129,7 @@ def calculate_weight_statistics(weight_path: str) -> WeightFileStatistics:
             file_size_mb=round(os.path.getsize(weight_path) / (1024 * 1024), 2),
             num_tensors=len(weights),
             tensor_info=tensor_infos,
-            parameter_stats=ParameterStats(
-                total_parameters=total_params,
-                total_parameters_millions=round(total_params / 1_000_000, 2),
-                total_parameters_billions=round(total_params / 1_000_000_000, 3),
-            ),
+            parameter_stats=ParameterStats(total_parameters=total_params),
             layer_analysis=analyze_layer_structure(weights),
             global_statistics=calculate_global_weight_stats(weights),
         )
@@ -164,7 +144,7 @@ def calculate_weight_statistics(weight_path: str) -> WeightFileStatistics:
 
 
 def calculate_tensor_stats(tensor: Any) -> TensorStats | None:
-    torch = _get_torch()
+    torch = get_torch()
 
     try:
         flat_tensor = tensor.flatten().float()
@@ -190,7 +170,7 @@ def calculate_tensor_stats(tensor: Any) -> TensorStats | None:
 
 
 def analyze_layer_structure(weights: dict[str, Any]) -> LayerAnalysis:
-    torch = _get_torch()
+    torch = get_torch()
 
     categorization = LayerCategorization()
     counts = LayerCounts()
@@ -247,7 +227,7 @@ def analyze_layer_structure(weights: dict[str, Any]) -> LayerAnalysis:
 
 
 def calculate_global_weight_stats(weights: dict[str, Any]) -> GlobalWeightStats | None:
-    torch = _get_torch()
+    torch = get_torch()
 
     try:
         all_weights = []
@@ -335,10 +315,7 @@ def analyze_model_weights(
             summary=WeightsSummary(
                 total_files_analyzed=successful_analyses,
                 total_parameters=total_params,
-                total_parameters_millions=round(total_params / 1_000_000, 2),
-                total_parameters_billions=round(total_params / 1_000_000_000, 3),
                 total_size_mb=round(total_size_mb, 2),
-                total_size_gb=round(total_size_mb / 1024, 3),
             ),
         )
 

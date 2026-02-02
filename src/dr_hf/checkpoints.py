@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pandas as pd
 from huggingface_hub import hf_hub_download
 
+from ._torch import get_torch
 from .branches import extract_step_from_branch, get_checkpoint_branches
 from .configs import analyze_model_config, download_config_file
 from .models import (
@@ -23,23 +23,6 @@ from .models import (
     WeightsAnalysis,
 )
 from .weights import analyze_model_weights
-
-_torch: ModuleType | None = None
-
-
-def _get_torch() -> ModuleType:
-    global _torch
-    if _torch is None:
-        try:
-            import torch
-
-            _torch = torch
-        except ImportError as e:
-            raise ImportError(
-                "torch is required for checkpoint analysis. "
-                "Install with: uv add dr-hf[weights]"
-            ) from e
-    return _torch
 
 
 def download_optimizer_checkpoint(
@@ -116,7 +99,7 @@ def _parse_learning_rate_info(checkpoint: dict[str, Any]) -> LearningRateInfo:
 
 
 def analyze_optimizer_checkpoint(checkpoint_path: str) -> OptimizerAnalysis:
-    torch = _get_torch()
+    torch = get_torch()
 
     try:
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
