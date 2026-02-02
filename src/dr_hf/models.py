@@ -1,6 +1,117 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, computed_field
+
+
+class BranchInfo(BaseModel):
+    branch: str
+    valid: bool = False
+    step: int | None = None
+    seed: str | None = None
+
+
+class SeedBranchInfo(BaseModel):
+    step: int
+    branch: str
+
+
+class SeedConfiguration(BaseModel):
+    count: int
+    step_range: tuple[int, int]
+    branches: list[SeedBranchInfo]
+
+
+class BranchMetadata(BaseModel):
+    repo_id: str
+    last_updated: datetime
+    total_branches: int
+    checkpoint_branches: int
+    seed_configurations: dict[str, SeedConfiguration]
+    other_branches: list[str]
+    all_checkpoint_branches: list[str]
+
+
+class TensorStats(BaseModel):
+    mean: float
+    std: float
+    min: float
+    max: float
+    median: float
+    abs_mean: float
+    zero_fraction: float
+    percentile_25: float | None = None
+    percentile_75: float | None = None
+    percentile_90: float | None = None
+    percentile_95: float | None = None
+    percentile_99: float | None = None
+
+
+class TensorInfo(BaseModel):
+    name: str
+    shape: list[int]
+    dtype: str
+    parameters: int
+    size_mb: float
+    statistics: TensorStats | None = None
+
+
+class LayerCategorization(BaseModel):
+    embedding_layers: list[str] = []
+    transformer_layers: list[str] = []
+    output_layers: list[str] = []
+    layer_norm_layers: list[str] = []
+    attention_layers: list[str] = []
+    feedforward_layers: list[str] = []
+    other_layers: list[str] = []
+
+
+class LayerCounts(BaseModel):
+    total_layers: int = 0
+    attention_heads: int = 0
+    feedforward_layers: int = 0
+    layer_norms: int = 0
+    estimated_transformer_layers: int = 0
+
+
+class LayerAnalysis(BaseModel):
+    layer_categorization: LayerCategorization
+    layer_counts: LayerCounts
+    transformer_layer_indices: list[int] = []
+
+
+class GlobalWeightStats(BaseModel):
+    global_mean: float
+    global_std: float
+    global_min: float
+    global_max: float
+    global_abs_mean: float
+    global_zero_fraction: float
+    global_percentile_1: float | None = None
+    global_percentile_5: float | None = None
+    global_percentile_25: float | None = None
+    global_percentile_50: float | None = None
+    global_percentile_75: float | None = None
+    global_percentile_95: float | None = None
+    global_percentile_99: float | None = None
+
+
+class ParameterStats(BaseModel):
+    total_parameters: int
+    total_parameters_millions: float
+    total_parameters_billions: float
+
+
+class WeightFileStatistics(BaseModel):
+    file_path: str
+    file_size_mb: float
+    num_tensors: int
+    tensor_info: list[TensorInfo] = []
+    parameter_stats: ParameterStats | None = None
+    layer_analysis: LayerAnalysis | None = None
+    global_statistics: GlobalWeightStats | None = None
+    error: str | None = None
 
 
 class ParamGroupInfo(BaseModel):
@@ -91,7 +202,7 @@ class WeightsAnalysis(BaseModel):
     available: bool = False
     error: str | None = None
     discovered_files: list[str] = []
-    file_analyses: dict = {}
+    file_analyses: dict[str, WeightFileStatistics] = {}
     summary: WeightsSummary | None = None
 
     @computed_field

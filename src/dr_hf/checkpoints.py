@@ -12,7 +12,6 @@ from huggingface_hub import hf_hub_download
 from .branches import extract_step_from_branch, get_checkpoint_branches
 from .configs import analyze_model_config, download_config_file
 from .models import (
-    ArchitectureInfo,
     CheckpointAnalysis,
     CheckpointComponents,
     CheckpointSummaryRow,
@@ -21,9 +20,7 @@ from .models import (
     OptimizerAnalysis,
     OptimizerComponentInfo,
     ParamGroupInfo,
-    ParameterEstimate,
     WeightsAnalysis,
-    WeightsSummary,
 )
 from .weights import analyze_model_weights
 
@@ -146,79 +143,6 @@ def analyze_optimizer_checkpoint(checkpoint_path: str) -> OptimizerAnalysis:
         return OptimizerAnalysis(available=False, error=str(e))
 
 
-def _parse_config_analysis(config_result: dict[str, Any]) -> ConfigAnalysis:
-    if "error" in config_result:
-        return ConfigAnalysis(available=False, error=config_result["error"])
-
-    arch_info = None
-    if "architecture_info" in config_result:
-        raw_arch = config_result["architecture_info"]
-        est_params = None
-        if (
-            "estimated_parameters" in raw_arch
-            and "error" not in raw_arch["estimated_parameters"]
-        ):
-            est_params = ParameterEstimate(**raw_arch["estimated_parameters"])
-
-        arch_info = ArchitectureInfo(
-            hidden_size=raw_arch.get("hidden_size"),
-            num_layers=raw_arch.get("num_layers"),
-            num_attention_heads=raw_arch.get("num_attention_heads"),
-            intermediate_size=raw_arch.get("intermediate_size"),
-            vocab_size=raw_arch.get("vocab_size"),
-            max_position_embeddings=raw_arch.get("max_position_embeddings"),
-            sequence_length=raw_arch.get("sequence_length"),
-            model_type=raw_arch.get("model_type"),
-            activation_function=raw_arch.get("activation_function"),
-            layer_norm_eps=raw_arch.get("layer_norm_eps"),
-            dropout=raw_arch.get("dropout"),
-            pad_token_id=raw_arch.get("pad_token_id"),
-            eos_token_id=raw_arch.get("eos_token_id"),
-            bos_token_id=raw_arch.get("bos_token_id"),
-            torch_dtype=raw_arch.get("torch_dtype"),
-            use_cache=raw_arch.get("use_cache"),
-            tie_word_embeddings=raw_arch.get("tie_word_embeddings"),
-            rope_scaling=raw_arch.get("rope_scaling"),
-            estimated_parameters=est_params,
-        )
-
-    return ConfigAnalysis(
-        available=True,
-        raw_config=config_result.get("raw_config"),
-        architecture_info=arch_info,
-        config_keys=config_result.get("config_keys", []),
-        config_type=config_result.get("config_type"),
-    )
-
-
-def _parse_weights_analysis(weights_result: dict[str, Any]) -> WeightsAnalysis:
-    if not weights_result.get("weights_available", False):
-        return WeightsAnalysis(
-            available=False,
-            error=weights_result.get("error"),
-            discovered_files=weights_result.get("discovered_files", []),
-        )
-
-    summary = None
-    if "summary" in weights_result:
-        raw_summary = weights_result["summary"]
-        summary = WeightsSummary(
-            total_files_analyzed=raw_summary.get("total_files_analyzed", 0),
-            total_parameters=raw_summary.get("total_parameters", 0),
-            total_parameters_millions=raw_summary.get("total_parameters_millions", 0.0),
-            total_parameters_billions=raw_summary.get("total_parameters_billions", 0.0),
-            total_size_mb=raw_summary.get("total_size_mb", 0.0),
-            total_size_gb=raw_summary.get("total_size_gb", 0.0),
-        )
-
-    return WeightsAnalysis(
-        available=True,
-        discovered_files=weights_result.get("discovered_files", []),
-        file_analyses=weights_result.get("file_analyses", {}),
-        summary=summary,
-    )
-
-
 def analyze_complete_checkpoint(
     repo_id: str,
     branch: str,
@@ -240,16 +164,14 @@ def analyze_complete_checkpoint(
     config_path, config_success, config_error = download_config_file(repo_id, branch)
 
     if config_success and config_path:
-        config_result = analyze_model_config(config_path)
-        components.config = _parse_config_analysis(config_result)
+        components.config = analyze_model_config(config_path)
     else:
         components.config = ConfigAnalysis(available=False, error=config_error)
 
     if include_weights:
-        weights_result = analyze_model_weights(
+        components.weights = analyze_model_weights(
             repo_id, branch, weight_files, delete_weights_after
         )
-        components.weights = _parse_weights_analysis(weights_result)
 
     return CheckpointAnalysis(
         branch=branch,

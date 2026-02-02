@@ -5,6 +5,8 @@ from typing import Any
 
 from huggingface_hub import hf_hub_download
 
+from .models import ArchitectureInfo, ConfigAnalysis, ParameterEstimate
+
 
 def download_config_file(
     repo_id: str, branch: str = "main", local_dir: str | None = None
@@ -24,25 +26,24 @@ def download_config_file(
         return None, False, error_msg
 
 
-def analyze_model_config(config_path: str) -> dict[str, Any]:
+def analyze_model_config(config_path: str) -> ConfigAnalysis:
     try:
         with open(config_path) as f:
             config = json.load(f)
 
-        return {
-            "raw_config": config,
-            "architecture_info": extract_model_architecture_info(config),
-            "config_keys": list(config.keys()) if isinstance(config, dict) else [],
-            "config_type": type(config).__name__,
-        }
+        return ConfigAnalysis(
+            available=True,
+            raw_config=config,
+            architecture_info=extract_model_architecture_info(config),
+            config_keys=list(config.keys()) if isinstance(config, dict) else [],
+            config_type=type(config).__name__,
+        )
 
     except Exception as e:
-        return {"error": str(e)}
+        return ConfigAnalysis(available=False, error=str(e))
 
 
-def extract_model_architecture_info(config: dict[str, Any]) -> dict[str, Any]:
-    arch_info: dict[str, Any] = {}
-
+def extract_model_architecture_info(config: dict[str, Any]) -> ArchitectureInfo:
     arch_fields = {
         "hidden_size": ["hidden_size", "d_model", "n_embd"],
         "num_layers": ["num_hidden_layers", "n_layer", "num_layers"],
@@ -64,18 +65,21 @@ def extract_model_architecture_info(config: dict[str, Any]) -> dict[str, Any]:
         "bos_token_id": ["bos_token_id"],
     }
 
+    extracted: dict[str, Any] = {}
     for standard_key, possible_keys in arch_fields.items():
         for key in possible_keys:
             if key in config:
-                arch_info[standard_key] = config[key]
+                extracted[standard_key] = config[key]
                 break
 
-    if (
-        "hidden_size" in arch_info
-        and "num_layers" in arch_info
-        and "vocab_size" in arch_info
-    ):
-        arch_info["estimated_parameters"] = estimate_parameter_count(arch_info)
+    estimated_parameters = None
+    if all(k in extracted for k in ["hidden_size", "num_layers", "vocab_size"]):
+        estimated_parameters = estimate_parameter_count(
+            hidden_size=extracted["hidden_size"],
+            num_layers=extracted["num_layers"],
+            vocab_size=extracted["vocab_size"],
+            intermediate_size=extracted.get("intermediate_size"),
+        )
 
     interesting_keys = [
         "torch_dtype",
@@ -85,19 +89,42 @@ def extract_model_architecture_info(config: dict[str, Any]) -> dict[str, Any]:
     ]
     for key in interesting_keys:
         if key in config:
-            arch_info[key] = config[key]
+            extracted[key] = config[key]
 
-    return arch_info
+    return ArchitectureInfo(
+        hidden_size=extracted.get("hidden_size"),
+        num_layers=extracted.get("num_layers"),
+        num_attention_heads=extracted.get("num_attention_heads"),
+        intermediate_size=extracted.get("intermediate_size"),
+        vocab_size=extracted.get("vocab_size"),
+        max_position_embeddings=extracted.get("max_position_embeddings"),
+        sequence_length=extracted.get("sequence_length"),
+        model_type=extracted.get("model_type"),
+        activation_function=extracted.get("activation_function"),
+        layer_norm_eps=extracted.get("layer_norm_eps"),
+        dropout=extracted.get("dropout"),
+        pad_token_id=extracted.get("pad_token_id"),
+        eos_token_id=extracted.get("eos_token_id"),
+        bos_token_id=extracted.get("bos_token_id"),
+        torch_dtype=extracted.get("torch_dtype"),
+        use_cache=extracted.get("use_cache"),
+        tie_word_embeddings=extracted.get("tie_word_embeddings"),
+        rope_scaling=extracted.get("rope_scaling"),
+        estimated_parameters=estimated_parameters,
+    )
 
 
-def estimate_parameter_count(arch_info: dict[str, Any]) -> dict[str, Any]:
-    hidden_size = arch_info.get("hidden_size", 0)
-    num_layers = arch_info.get("num_layers", 0)
-    vocab_size = arch_info.get("vocab_size", 0)
-    intermediate_size = arch_info.get("intermediate_size", hidden_size * 4)
-
+def estimate_parameter_count(
+    hidden_size: int,
+    num_layers: int,
+    vocab_size: int,
+    intermediate_size: int | None = None,
+) -> ParameterEstimate | None:
     if not all([hidden_size, num_layers, vocab_size]):
-        return {"error": "Insufficient info for parameter estimation"}
+        return None
+
+    if intermediate_size is None:
+        intermediate_size = hidden_size * 4
 
     embedding_params = vocab_size * hidden_size
     attention_params = 4 * hidden_size * hidden_size
@@ -110,11 +137,11 @@ def estimate_parameter_count(arch_info: dict[str, Any]) -> dict[str, Any]:
 
     total_params = embedding_params + total_layer_params + output_head_params
 
-    return {
-        "embedding_parameters": embedding_params,
-        "per_layer_parameters": per_layer_params,
-        "total_layer_parameters": total_layer_params,
-        "output_head_parameters": output_head_params,
-        "estimated_total_parameters": total_params,
-        "estimated_total_millions": round(total_params / 1_000_000, 1),
-    }
+    return ParameterEstimate(
+        embedding_parameters=embedding_params,
+        per_layer_parameters=per_layer_params,
+        total_layer_parameters=total_layer_params,
+        output_head_parameters=output_head_params,
+        estimated_total_parameters=total_params,
+        estimated_total_millions=round(total_params / 1_000_000, 1),
+    )
