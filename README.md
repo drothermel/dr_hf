@@ -39,7 +39,8 @@ loc = HFLocation(org="allenai", repo_name="my-dataset")
 print(loc.repo_uri)  # hf://datasets/allenai/my-dataset
 
 # Download a dataset to local parquet
-download_dataset("squad", split="train", output_dir="./data")
+from pathlib import Path
+download_dataset(Path("./data/squad_train.parquet"), repo_id="squad", split="train")
 ```
 
 ## Module Overview

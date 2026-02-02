@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from datetime import datetime, timezone
 
 from huggingface_hub import list_repo_refs
 
 from .models import BranchInfo, BranchMetadata, SeedBranchInfo, SeedConfiguration
+
+CHECKPOINT_BRANCH_RE = re.compile(r"^step\d+-seed-.+$")
 
 
 def get_all_repo_branches(repo_id: str) -> list[str]:
@@ -14,8 +17,7 @@ def get_all_repo_branches(repo_id: str) -> list[str]:
 
 
 def is_checkpoint_branch(branch: str) -> bool:
-    pattern = re.compile(r"^step\d+-seed-.+$")
-    return bool(pattern.match(branch))
+    return bool(CHECKPOINT_BRANCH_RE.match(branch))
 
 
 def get_checkpoint_branches(repo_id: str) -> list[str]:
@@ -58,17 +60,15 @@ def sort_branches_by_step(branches: list[str]) -> list[str]:
 
 
 def group_branches_by_seed(branches: list[str]) -> dict[str, list[str]]:
-    groups: dict[str, list[str]] = {}
+    groups = defaultdict(list)
     for branch in branches:
         seed = extract_seed_from_branch(branch)
-        if seed not in groups:
-            groups[seed] = []
         groups[seed].append(branch)
 
     for seed in groups:
         groups[seed] = sort_branches_by_step(groups[seed])
 
-    return groups
+    return dict(groups)
 
 
 def get_step_range_for_seed(branches: list[str]) -> tuple[int, int]:

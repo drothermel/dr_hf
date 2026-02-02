@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 from typing import Annotated, ClassVar
@@ -55,7 +56,8 @@ class HFLocation(BaseModel):
     @computed_field
     @property
     def hf_hub_repo_type(self) -> str:
-        assert self.repo_type == "datasets", f"Invalid repo type: {self.repo_type}"
+        if self.repo_type != "datasets":
+            raise ValueError(f"Invalid repo type: {self.repo_type}")
         return "dataset"
 
     @classmethod
@@ -65,17 +67,20 @@ class HFLocation(BaseModel):
         *,
         filepaths: Iterable[str] | None = None,
     ) -> HFLocation:
-        assert uri and isinstance(uri, str), "HF URI must be a non-empty string."
+        if not isinstance(uri, str):
+            raise TypeError("HF URI must be a non-empty string.")
+        if not uri:
+            raise ValueError("HF URI must be a non-empty string.")
         prefix = cls.uri_prefix
-        assert uri.startswith(prefix), (
-            f"HF URI must start with '{prefix}'. Got: {uri!r}"
-        )
+        if not uri.startswith(prefix):
+            raise ValueError(f"HF URI must start with '{prefix}'. Got: {uri!r}")
         stripped = uri[len(prefix) :]
 
         parts = [part for part in stripped.split("/") if part]
-        assert len(parts) >= 2, (
-            "HF URI must include at least org and repo, e.g. 'hf://datasets/org/repo'."
-        )
+        if len(parts) < 2:
+            raise ValueError(
+                "HF URI must include at least org and repo, e.g. 'hf://datasets/org/repo'."
+            )
 
         expected_repo_type = cls.repo_type
         alias_map = {expected_repo_type: expected_repo_type}
@@ -84,21 +89,23 @@ class HFLocation(BaseModel):
         potential_repo_type = parts[0]
         normalized = alias_map.get(potential_repo_type)
         if normalized:
-            assert normalized == expected_repo_type, (
-                f"HF URI repo type '{potential_repo_type}' does not match expected "
-                f"'{expected_repo_type}'."
-            )
+            if normalized != expected_repo_type:
+                raise ValueError(
+                    f"HF URI repo type '{potential_repo_type}' does not match expected "
+                    f"'{expected_repo_type}'."
+                )
             org_repo_parts = parts[1:]
         elif len(parts) == 2:
             org_repo_parts = parts
         else:
-            raise AssertionError(
+            raise ValueError(
                 "HF URI with nested paths must start with 'hf://datasets/' or 'hf://dataset/'."
             )
 
-        assert len(org_repo_parts) >= 2, (
-            "HF URI must include both org and repo names, e.g. 'hf://datasets/org/repo'."
-        )
+        if len(org_repo_parts) < 2:
+            raise ValueError(
+                "HF URI must include both org and repo names, e.g. 'hf://datasets/org/repo'."
+            )
         org, repo_name, *sub_path = org_repo_parts
         resolved_paths: list[str] = list(filepaths or [])
         if sub_path:
@@ -123,7 +130,10 @@ class HFLocation(BaseModel):
 
     @staticmethod
     def _is_dir(path: str | Path) -> bool:
-        return str(path).endswith("/") or not Path(path).suffix
+        if Path(path).exists():
+            return Path(path).is_dir()
+        else:
+            return str(path).endswith(os.path.sep)
 
     def get_the_single_filepath(self, local_dir: str | Path | None = None) -> str:
         return self.resolve_filepaths(local_dir=local_dir, expect_one=True)[0]

@@ -7,88 +7,98 @@ HfApi upload/download operations for files and parquet datasets.
 ### upload_file_to_hf
 ```python
 def upload_file_to_hf(
-    file_path: Path,
-    repo_id: str,
-    path_in_repo: str | None = None,
-    repo_type: str = "dataset",
+    local_path: str | Path,
+    hf_loc: HFLocation,
+    *,
     hf_token: str | None = None
 ) -> str
 ```
-Upload a file to a HuggingFace repository. Returns the URL of the uploaded file.
+Upload a file to a HuggingFace repository. The `HFLocation` must have exactly one filepath specified. Returns the URL of the uploaded file.
 
 ### cached_download_tables_from_hf
 ```python
 def cached_download_tables_from_hf(
-    repo_id: str,
-    local_dir: Path | None = None,
+    hf_loc: HFLocation,
+    *,
+    cache_dir: str | Path,
     hf_token: str | None = None,
-    filepaths: list[str] | None = None,
-    allow_patterns: list[str] | None = None
-) -> list[pd.DataFrame]
+    force_download: bool = False,
+    verbose: bool = True
+) -> dict[str, str | Path]
 ```
-Download parquet files from HuggingFace with local caching. Returns a list of DataFrames.
+Download parquet files from HuggingFace with local caching. Returns a dictionary mapping remote filepaths to local file paths. Files are only downloaded if they don't exist locally (unless `force_download=True`).
 
 ### get_tables_from_cache
 ```python
 def get_tables_from_cache(
-    repo_id: str,
-    local_dir: Path,
-    filepaths: list[str] | None = None,
-    allow_patterns: list[str] | None = None
-) -> list[pd.DataFrame]
+    hf_loc: HFLocation,
+    cache_dir: str | Path
+) -> dict[str, pd.DataFrame]
 ```
-Read parquet files from local cache directory.
+Read parquet files from local cache directory. Returns a dictionary mapping file stems to DataFrames.
 
 ### read_local_parquet_paths
 ```python
 def read_local_parquet_paths(
-    local_dir: Path,
-    filepaths: list[str] | None = None,
-    allow_patterns: list[str] | None = None
-) -> list[str] | list[Path]
+    local_paths: list[str] | list[Path]
+) -> dict[str, pd.DataFrame]
 ```
-List parquet files in a local directory, optionally filtered by paths or patterns.
+Read parquet files from a list of local paths. Returns a dictionary mapping file stems to DataFrames.
 
 ### query_hf_with_duckdb (requires `[duckdb]`)
 ```python
 def query_hf_with_duckdb(
-    repo_id: str,
-    query: str,
-    hf_token: str | None = None
-) -> pd.DataFrame
+    hf_loc: HFLocation,
+    connection: duckdb.DuckDBPyConnection
+) -> dict[str, pd.DataFrame]
 ```
-Query a HuggingFace dataset directly using DuckDB SQL. Requires the `[duckdb]` optional dependency.
+Query a HuggingFace dataset directly using DuckDB. Requires a DuckDB connection object. Returns a dictionary mapping file stems to DataFrames.
 
 ## Usage
 
 ```python
 from pathlib import Path
+import duckdb
 from dr_hf import (
     upload_file_to_hf,
     cached_download_tables_from_hf,
     query_hf_with_duckdb,
+    HFLocation,
 )
 
 # Upload a file
+loc = HFLocation(
+    org="username",
+    repo_name="my-dataset",
+    filepaths=["data/results.parquet"]
+)
 url = upload_file_to_hf(
     Path("results.parquet"),
-    repo_id="username/my-dataset",
-    path_in_repo="data/results.parquet",
+    loc,
     hf_token="hf_..."
 )
 print(f"Uploaded to: {url}")
 
 # Download parquet tables with caching
-dfs = cached_download_tables_from_hf(
-    "allenai/c4",
-    local_dir=Path("./cache"),
-    allow_patterns=["data/train-00000-*.parquet"]
+loc = HFLocation(
+    org="allenai",
+    repo_name="c4",
+    filepaths=["en/train-00000-of-01024.parquet"]
 )
-combined = pd.concat(dfs)
+tables = cached_download_tables_from_hf(
+    loc,
+    cache_dir=Path("./cache"),
+    hf_token="hf_..."
+)
+# tables is a dict: {"en/train-00000-of-01024": Path("./cache/...")}
+
+# Read cached tables as DataFrames
+from dr_hf import get_tables_from_cache
+dfs = get_tables_from_cache(loc, cache_dir=Path("./cache"))
+# dfs is a dict: {"en/train-00000-of-01024": pd.DataFrame}
 
 # Query with DuckDB (requires [duckdb])
-df = query_hf_with_duckdb(
-    "squad",
-    "SELECT * FROM 'hf://datasets/squad/squad/train/*.parquet' LIMIT 100"
-)
+conn = duckdb.connect()
+loc = HFLocation.from_uri("hf://datasets/squad/squad")
+results = query_hf_with_duckdb(loc, conn)
 ```

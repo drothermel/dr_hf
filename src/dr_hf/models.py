@@ -232,6 +232,12 @@ class WeightsAnalysis(BaseModel):
     @computed_field
     @property
     def weights_available(self) -> bool:
+        """Alias for `available` field, maintained for API/serialization stability.
+
+        This property mirrors `available` to provide a consistent naming convention
+        in serialized outputs (e.g., JSON) where `weights_available` may be expected
+        by external consumers or for consistency with other component fields.
+        """
         return self.available
 
 

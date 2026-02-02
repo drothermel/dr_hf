@@ -73,5 +73,8 @@ estimate = estimate_parameter_count(
     vocab_size=50257,
     intermediate_size=3072,
 )
-print(f"Estimated: {estimate.estimated_total_millions}M parameters")
+if estimate is None:
+    print("Unable to estimate parameters: required fields are missing")
+else:
+    print(f"Estimated: {estimate.estimated_total_millions}M parameters")
 ```

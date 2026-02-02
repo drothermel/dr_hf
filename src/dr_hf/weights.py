@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Any
 
 from huggingface_hub import hf_hub_download, list_repo_files
+
+logger = logging.getLogger(__name__)
 
 from ._torch import get_torch
 from .models import (
@@ -32,6 +35,21 @@ def _check_safetensors() -> bool:
     except ImportError:
         _safetensors_available = False
     return _safetensors_available
+
+
+def _check_pytorch_version_for_weights_only() -> bool:
+    """Check if PyTorch version is >= 2.6.0, which supports weights_only=True."""
+    torch = get_torch()
+    version_str = torch.__version__
+    # Handle version strings like "2.6.0" or "2.6.0+cu118"
+    version_parts = version_str.split("+")[0].split(".")
+    try:
+        major = int(version_parts[0])
+        minor = int(version_parts[1]) if len(version_parts) > 1 else 0
+        return (major, minor) >= (2, 6)
+    except (ValueError, IndexError):
+        # If version parsing fails, assume it's too old to be safe
+        return False
 
 
 def discover_model_weight_files(repo_id: str, branch: str = "main") -> list[str]:
@@ -93,7 +111,15 @@ def calculate_weight_statistics(weight_path: str) -> WeightFileStatistics:
                 for key in f.keys():
                     weights[key] = f.get_tensor(key)
         else:
-            weights = torch.load(weight_path, map_location="cpu")
+            # Use weights_only=True for security (requires PyTorch >= 2.6.0)
+            # Safetensors remains the preferred path (checked first above)
+            if not _check_pytorch_version_for_weights_only():
+                raise RuntimeError(
+                    f"PyTorch >= 2.6.0 is required for safe loading of .bin weight files. "
+                    f"Current version: {torch.__version__}. "
+                    f"Please upgrade PyTorch or use .safetensors files instead."
+                )
+            weights = torch.load(weight_path, map_location="cpu", weights_only=True)
 
         if not isinstance(weights, dict):
             return WeightFileStatistics(
@@ -228,34 +254,138 @@ def analyze_layer_structure(weights: dict[str, Any]) -> LayerAnalysis:
 
 def calculate_global_weight_stats(weights: dict[str, Any]) -> GlobalWeightStats | None:
     torch = get_torch()
+    import random
 
     try:
-        all_weights = []
-        for tensor in weights.values():
-            if torch.is_tensor(tensor):
-                all_weights.append(tensor.flatten().float())
+        # Welford's algorithm state for mean/variance
+        count = 0
+        mean = 0.0
+        m2 = 0.0  # Sum of squared differences from mean
 
-        if not all_weights:
+        # Running min/max
+        global_min = float("inf")
+        global_max = float("-inf")
+
+        # For abs_mean: sum of absolute values and total count
+        abs_sum = 0.0
+
+        # For zero_fraction: count of zeros and total count
+        zero_count = 0
+
+        # Reservoir sampling for percentiles (fixed size: 10,000 samples)
+        reservoir_size = 10000
+        reservoir_samples = []
+        reservoir_count = 0
+
+        # Iterate over all tensors without concatenating
+        for tensor in weights.values():
+            if not torch.is_tensor(tensor):
+                continue
+
+            flat_tensor = tensor.flatten().float()
+            tensor_size = flat_tensor.numel()
+
+            if tensor_size == 0:
+                continue
+
+            # Update min/max
+            tensor_min = float(torch.min(flat_tensor))
+            tensor_max = float(torch.max(flat_tensor))
+            global_min = min(global_min, tensor_min)
+            global_max = max(global_max, tensor_max)
+
+            # Update abs_sum
+            abs_sum += float(torch.sum(torch.abs(flat_tensor)))
+
+            # Update zero count
+            zero_count += int(torch.sum(flat_tensor == 0.0))
+
+            # Welford's algorithm for incremental mean/variance (batch update per tensor)
+            # Batch update formula: for chunk with n elements and mean m,
+            # new_mean = (old_count * old_mean + n * chunk_mean) / (old_count + n)
+            chunk_mean = float(torch.mean(flat_tensor))
+            chunk_count = tensor_size
+
+            # Update mean using batch formula
+            new_count = count + chunk_count
+            if new_count > 0:
+                # Batch update for mean
+                new_mean = (count * mean + chunk_count * chunk_mean) / new_count
+
+                # For variance update, we need to account for the change in mean
+                # Using the combined variance formula for two groups
+                chunk_variance = float(torch.var(flat_tensor, unbiased=False))
+                if chunk_count > 0:
+                    # Combined variance: m2_total = m2_old + m2_chunk + count*chunk_count*(old_mean - chunk_mean)^2 / (count + chunk_count)
+                    delta_mean = chunk_mean - mean
+                    m2 += chunk_count * (
+                        chunk_variance + delta_mean * delta_mean * count / new_count
+                    )
+                    mean = new_mean
+                    count = new_count
+
+            # Reservoir sampling for percentiles
+            # Process elements sequentially to maintain uniform sampling property
+            # For very large tensors, process in chunks to avoid memory issues
+            chunk_size = (
+                100000  # Process 100k elements at a time for reservoir sampling
+            )
+
+            for i in range(0, tensor_size, chunk_size):
+                end_idx = min(i + chunk_size, tensor_size)
+                chunk = flat_tensor[i:end_idx].cpu().numpy().flatten()
+
+                for value in chunk:
+                    reservoir_count += 1
+                    if len(reservoir_samples) < reservoir_size:
+                        # Fill reservoir initially
+                        reservoir_samples.append(float(value))
+                    else:
+                        # Replace with probability reservoir_size / reservoir_count
+                        replace_idx = random.randint(0, reservoir_count - 1)
+                        if replace_idx < reservoir_size:
+                            reservoir_samples[replace_idx] = float(value)
+
+        if count == 0:
             return None
 
-        global_tensor = torch.cat(all_weights)
+        # Compute final statistics
+        global_mean = mean
+        # Population std: sqrt(m2 / count), sample std would be sqrt(m2 / (count - 1))
+        global_std = float(torch.sqrt(torch.tensor(m2 / count))) if m2 > 0 else 0.0
+
+        global_abs_mean = abs_sum / count
+        global_zero_fraction = zero_count / count
+
+        # Compute percentiles from reservoir sample
+        percentile_values = {}
+        if reservoir_samples:
+            reservoir_tensor = torch.tensor(reservoir_samples, dtype=torch.float32)
+            for p in [0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99]:
+                percentile_key = f"percentile_{int(p * 100)}"
+                percentile_values[f"global_{percentile_key}"] = float(
+                    torch.quantile(reservoir_tensor, p)
+                )
+        else:
+            # Fallback if no samples collected
+            for p in [0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99]:
+                percentile_key = f"percentile_{int(p * 100)}"
+                percentile_values[f"global_{percentile_key}"] = None
 
         return GlobalWeightStats(
-            global_mean=float(torch.mean(global_tensor)),
-            global_std=float(torch.std(global_tensor)),
-            global_min=float(torch.min(global_tensor)),
-            global_max=float(torch.max(global_tensor)),
-            global_abs_mean=float(torch.mean(torch.abs(global_tensor))),
-            global_zero_fraction=float(
-                torch.sum(global_tensor == 0.0) / global_tensor.numel()
-            ),
-            global_percentile_1=float(torch.quantile(global_tensor, 0.01)),
-            global_percentile_5=float(torch.quantile(global_tensor, 0.05)),
-            global_percentile_25=float(torch.quantile(global_tensor, 0.25)),
-            global_percentile_50=float(torch.quantile(global_tensor, 0.50)),
-            global_percentile_75=float(torch.quantile(global_tensor, 0.75)),
-            global_percentile_95=float(torch.quantile(global_tensor, 0.95)),
-            global_percentile_99=float(torch.quantile(global_tensor, 0.99)),
+            global_mean=global_mean,
+            global_std=global_std,
+            global_min=global_min if global_min != float("inf") else 0.0,
+            global_max=global_max if global_max != float("-inf") else 0.0,
+            global_abs_mean=global_abs_mean,
+            global_zero_fraction=global_zero_fraction,
+            global_percentile_1=percentile_values.get("global_percentile_1"),
+            global_percentile_5=percentile_values.get("global_percentile_5"),
+            global_percentile_25=percentile_values.get("global_percentile_25"),
+            global_percentile_50=percentile_values.get("global_percentile_50"),
+            global_percentile_75=percentile_values.get("global_percentile_75"),
+            global_percentile_95=percentile_values.get("global_percentile_95"),
+            global_percentile_99=percentile_values.get("global_percentile_99"),
         )
     except Exception:
         return None
@@ -324,5 +454,5 @@ def analyze_model_weights(
             for file_path in downloaded_files:
                 try:
                     os.remove(file_path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to remove downloaded file {file_path}: {e}")

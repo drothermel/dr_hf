@@ -89,9 +89,9 @@ Save a single analysis to JSON.
 def save_all_analyses_outputs(
     all_analyses: dict[str, CheckpointAnalysis],
     output_dir: str | None = None
-) -> tuple[str, str, str]
+) -> tuple[str | None, str | None, str]
 ```
-Save comprehensive CSV, LR CSV, and JSON. Returns paths to all three files.
+Save comprehensive CSV, LR CSV, and JSON. Returns paths to CSV files (None if empty) and JSON path (always written).
 
 ## Models
 
@@ -132,4 +132,9 @@ for branch, analysis in sorted(analyses.items(), key=lambda x: x[1].step):
 
 # Save all outputs
 csv_path, lr_path, json_path = save_all_analyses_outputs(analyses, "output/")
+if csv_path:
+    print(f"Comprehensive summary saved to {csv_path}")
+if lr_path:
+    print(f"Learning rate summary saved to {lr_path}")
+print(f"Full analyses saved to {json_path}")
 ```

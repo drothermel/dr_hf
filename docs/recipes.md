@@ -63,21 +63,28 @@ df_filtered.to_csv("checkpoint_summary.csv", index=False)
 
 ```python
 from pathlib import Path
-from dr_hf import cached_download_tables_from_hf, HFLocation
+from dr_hf import cached_download_tables_from_hf, get_tables_from_cache, HFLocation
 import pandas as pd
 
-loc = HFLocation(org="allenai", repo_name="c4")
+# Create location with specific filepaths
+loc = HFLocation(
+    org="allenai",
+    repo_name="c4",
+    filepaths=["en/train-00000-of-01024.parquet"]
+)
 cache_dir = Path("./data/cache")
 
-# Download specific files
-dfs = cached_download_tables_from_hf(
-    loc.repo_id,
-    local_dir=cache_dir / loc.org / loc.repo_name,
-    allow_patterns=["en/train-00000-*.parquet"],
+# Download specific files (returns dict of paths)
+tables = cached_download_tables_from_hf(
+    loc,
+    cache_dir=cache_dir,
 )
 
+# Read cached tables as DataFrames
+dfs = get_tables_from_cache(loc, cache_dir=cache_dir)
+
 # Combine into single DataFrame
-combined = pd.concat(dfs, ignore_index=True)
+combined = pd.concat(list(dfs.values()), ignore_index=True)
 print(f"Loaded {len(combined)} rows")
 ```
 
@@ -93,27 +100,31 @@ if success:
     arch = analysis.architecture_info
 
     print(f"Model: {arch.model_type}")
-    print(f"Parameters: ~{arch.estimated_parameters.estimated_total_millions}M")
+    if arch.estimated_parameters is not None:
+        print(f"Parameters: ~{arch.estimated_parameters.estimated_total_millions}M")
+    else:
+        print(f"Parameters: N/A")
     print(f"Hidden: {arch.hidden_size}, Layers: {arch.num_layers}")
     print(f"Vocab: {arch.vocab_size}")
 ```
 
-## Query HuggingFace Dataset with SQL
+## Query HuggingFace Dataset with DuckDB
 
 ```python
-from dr_hf import query_hf_with_duckdb
+import duckdb
+from dr_hf import query_hf_with_duckdb, HFLocation
 
 # Requires: uv add dr-hf[duckdb]
-df = query_hf_with_duckdb(
-    "squad",
-    """
-    SELECT context, question, answers
-    FROM 'hf://datasets/squad/squad/train/*.parquet'
-    WHERE length(context) < 500
-    LIMIT 100
-    """
-)
-print(df.head())
+conn = duckdb.connect()
+loc = HFLocation.from_uri("hf://datasets/squad/squad")
+
+# Query returns dict of DataFrames (one per file)
+results = query_hf_with_duckdb(loc, conn)
+
+# Access the first result
+if results:
+    df = list(results.values())[0]
+    print(df.head())
 ```
 
 ## Build HFLocation from Different Sources

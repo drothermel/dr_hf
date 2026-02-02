@@ -25,14 +25,17 @@ def upload_file_to_hf(
     hf_loc: HFLocation,
     *,
     hf_token: str | None = None,
-) -> None:
+) -> str:
     api = HfApi(token=hf_token)
+    path_in_repo = hf_loc.get_the_single_filepath()
     api.upload_file(
         path_or_fileobj=str(local_path),
         repo_id=hf_loc.repo_id,
-        path_in_repo=hf_loc.get_the_single_filepath(),
+        path_in_repo=path_in_repo,
         repo_type=hf_loc.hf_hub_repo_type,
     )
+    # Return the URL of the uploaded file
+    return str(hf_loc.get_file_download_link(path_in_repo))
 
 
 def get_tables_from_cache(

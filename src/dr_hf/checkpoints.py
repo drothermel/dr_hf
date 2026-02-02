@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 from huggingface_hub import hf_hub_download
+
+logger = logging.getLogger(__name__)
 
 from ._torch import get_torch
 from .branches import extract_step_from_branch, get_checkpoint_branches
@@ -98,11 +101,57 @@ def _parse_learning_rate_info(checkpoint: dict[str, Any]) -> LearningRateInfo:
     return lr_info
 
 
+def _check_pytorch_version_for_weights_only() -> bool:
+    """Check if PyTorch version is >= 2.6.0, which supports weights_only=True."""
+    torch = get_torch()
+    version_str = torch.__version__
+    # Handle version strings like "2.6.0" or "2.6.0+cu118"
+    version_parts = version_str.split("+")[0].split(".")
+    try:
+        major = int(version_parts[0])
+        minor = int(version_parts[1]) if len(version_parts) > 1 else 0
+        return (major, minor) >= (2, 6)
+    except (ValueError, IndexError):
+        # If version parsing fails, assume it's too old to be safe
+        return False
+
+
 def analyze_optimizer_checkpoint(checkpoint_path: str) -> OptimizerAnalysis:
+    """
+    Analyze an optimizer checkpoint file.
+
+    This function loads and analyzes optimizer checkpoint files. Note that
+    optimizer checkpoint files must be trusted as torch.load() can execute
+    arbitrary code. For PyTorch >= 2.6, this function uses weights_only=True
+    to mitigate code execution risks. For older PyTorch versions, the checkpoint
+    is loaded without this protection.
+
+    It is recommended that optimizer checkpoints be saved as state_dicts to
+    avoid code execution risks.
+
+    Args:
+        checkpoint_path: Path to the optimizer checkpoint file.
+
+    Returns:
+        OptimizerAnalysis object containing the analysis results.
+    """
     torch = get_torch()
 
     try:
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        # Use weights_only=True for PyTorch >= 2.6 to prevent code execution
+        if _check_pytorch_version_for_weights_only():
+            checkpoint = torch.load(
+                checkpoint_path, map_location="cpu", weights_only=True
+            )
+        else:
+            logger.warning(
+                f"PyTorch version {torch.__version__} < 2.6.0 does not support "
+                "weights_only=True. Loading optimizer checkpoint without this "
+                "protection. Optimizer checkpoint files must be trusted as "
+                "torch.load() can execute arbitrary code. Consider upgrading "
+                "PyTorch or ensuring checkpoints are saved as state_dicts."
+            )
+            checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
         analysis = OptimizerAnalysis(
             available=True,
@@ -277,7 +326,7 @@ def save_checkpoint_analysis(
 
 def save_all_analyses_outputs(
     all_analyses: dict[str, CheckpointAnalysis], output_dir: str | None = None
-) -> tuple[str, str, str]:
+) -> tuple[str | None, str | None, str]:
     if output_dir:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -292,13 +341,19 @@ def save_all_analyses_outputs(
     comprehensive_summary = create_comprehensive_summary(all_analyses)
     if not comprehensive_summary.empty:
         comprehensive_summary.to_csv(comprehensive_csv_path, index=False)
+        comprehensive_csv_path_str: str | None = str(comprehensive_csv_path)
+    else:
+        comprehensive_csv_path_str = None
 
     lr_summary = create_learning_rate_summary(all_analyses)
     if not lr_summary.empty:
         lr_summary.to_csv(lr_csv_path, index=False)
+        lr_csv_path_str: str | None = str(lr_csv_path)
+    else:
+        lr_csv_path_str = None
 
     serializable = {k: v.model_dump() for k, v in all_analyses.items()}
     with open(json_path, "w") as f:
         json.dump(serializable, f, indent=2, default=str)
 
-    return str(comprehensive_csv_path), str(lr_csv_path), str(json_path)
+    return comprehensive_csv_path_str, lr_csv_path_str, str(json_path)

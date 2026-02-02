@@ -6,15 +6,15 @@ Environment path management using dotenv.
 
 ### get_data_dir
 ```python
-def get_data_dir() -> str
+def get_data_dir() -> Path
 ```
-Get the DATA_DIR environment variable. Loads from `.env` file if present.
+Get the DATA_DIR environment variable as a Path object. Loads from `.env` file if present.
 
 ### get_repo_dir
 ```python
-def get_repo_dir() -> str
+def get_repo_dir() -> Path
 ```
-Get the REPO_DIR environment variable. Loads from `.env` file if present.
+Get the REPO_DIR environment variable as a Path object. Loads from `.env` file if present.
 
 ## Environment Variables
 
@@ -26,12 +26,11 @@ Both functions expect these environment variables to be set (either in the shell
 ## Usage
 
 ```python
-from pathlib import Path
 from dr_hf import get_data_dir, get_repo_dir
 
-# Get paths from environment
-data_dir = Path(get_data_dir())
-repo_dir = Path(get_repo_dir())
+# Get paths from environment (already Path objects)
+data_dir = get_data_dir()
+repo_dir = get_repo_dir()
 
 # Use for cache locations
 cache_path = data_dir / "hf_cache" / "datasets"
@@ -42,7 +41,7 @@ output_path = repo_dir / "outputs" / "analysis"
 
 Create a `.env` file in your project root:
 
-```
+```dotenv
 DATA_DIR=/path/to/data
 REPO_DIR=/path/to/repos
 ```

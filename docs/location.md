@@ -36,13 +36,14 @@ def from_uri(cls, uri: str) -> HFLocation
 ```
 Parse a HuggingFace URI into an HFLocation.
 
-### Instance Methods
-
 #### norm_posix
 ```python
-def norm_posix(self, path: str) -> str
+@staticmethod
+def norm_posix(path: str | Path) -> str
 ```
 Normalize a path to POSIX format.
+
+### Instance Methods
 
 #### build_local_dir
 ```python

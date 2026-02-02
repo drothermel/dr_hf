@@ -28,7 +28,7 @@ def download_config_file(
 
 def analyze_model_config(config_path: str) -> ConfigAnalysis:
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = json.load(f)
 
         return ConfigAnalysis(
