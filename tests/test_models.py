@@ -10,6 +10,7 @@ from dr_hf.models import (
     OptimizerAnalysis,
     ParamGroupInfo,
     ParameterEstimate,
+    ParameterStats,
     WeightsAnalysis,
     WeightsSummary,
 )
@@ -48,9 +49,9 @@ def test_config_analysis() -> None:
         per_layer_parameters=500,
         total_layer_parameters=2000,
         output_head_parameters=1000,
-        estimated_total_parameters=4000,
-        estimated_total_millions=0.004,
+        estimated_total_parameters=4000000,
     )
+    assert est.estimated_total_millions == 4.0
     arch = ArchitectureInfo(
         hidden_size=768,
         num_layers=12,
@@ -66,12 +67,14 @@ def test_weights_analysis() -> None:
     summary = WeightsSummary(
         total_files_analyzed=1,
         total_parameters=1000000,
-        total_parameters_millions=1.0,
+        total_size_mb=100.0,
     )
     wgt = WeightsAnalysis(available=True, summary=summary)
     assert wgt.available
     assert wgt.weights_available
     assert wgt.summary.total_parameters_millions == 1.0
+    assert wgt.summary.total_parameters_billions == 0.001
+    assert wgt.summary.total_size_gb == 0.098
 
 
 def test_checkpoint_analysis() -> None:
@@ -121,3 +124,31 @@ def test_model_dump() -> None:
     assert data["branch"] == "step0-seed-test"
     assert data["step"] == 0
     assert "components" in data
+
+
+def test_computed_fields() -> None:
+    stats = ParameterStats(total_parameters=125_000_000)
+    assert stats.total_parameters_millions == 125.0
+    assert stats.total_parameters_billions == 0.125
+
+    estimate = ParameterEstimate(
+        embedding_parameters=10_000_000,
+        per_layer_parameters=5_000_000,
+        total_layer_parameters=60_000_000,
+        output_head_parameters=10_000_000,
+        estimated_total_parameters=80_000_000,
+    )
+    assert estimate.estimated_total_millions == 80.0
+
+    summary = WeightsSummary(
+        total_files_analyzed=2,
+        total_parameters=7_000_000_000,
+        total_size_mb=14336.0,
+    )
+    assert summary.total_parameters_millions == 7000.0
+    assert summary.total_parameters_billions == 7.0
+    assert summary.total_size_gb == 14.0
+
+    data = stats.model_dump()
+    assert "total_parameters_millions" in data
+    assert data["total_parameters_millions"] == 125.0

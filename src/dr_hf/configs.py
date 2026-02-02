@@ -143,5 +143,4 @@ def estimate_parameter_count(
         total_layer_parameters=total_layer_params,
         output_head_parameters=output_head_params,
         estimated_total_parameters=total_params,
-        estimated_total_millions=round(total_params / 1_000_000, 1),
     )

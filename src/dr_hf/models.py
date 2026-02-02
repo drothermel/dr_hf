@@ -99,8 +99,16 @@ class GlobalWeightStats(BaseModel):
 
 class ParameterStats(BaseModel):
     total_parameters: int
-    total_parameters_millions: float
-    total_parameters_billions: float
+
+    @computed_field
+    @property
+    def total_parameters_millions(self) -> float:
+        return round(self.total_parameters / 1_000_000, 2)
+
+    @computed_field
+    @property
+    def total_parameters_billions(self) -> float:
+        return round(self.total_parameters / 1_000_000_000, 3)
 
 
 class WeightFileStatistics(BaseModel):
@@ -155,7 +163,11 @@ class ParameterEstimate(BaseModel):
     total_layer_parameters: int
     output_head_parameters: int
     estimated_total_parameters: int
-    estimated_total_millions: float
+
+    @computed_field
+    @property
+    def estimated_total_millions(self) -> float:
+        return round(self.estimated_total_parameters / 1_000_000, 1)
 
 
 class ArchitectureInfo(BaseModel):
@@ -192,10 +204,22 @@ class ConfigAnalysis(BaseModel):
 class WeightsSummary(BaseModel):
     total_files_analyzed: int = 0
     total_parameters: int = 0
-    total_parameters_millions: float = 0.0
-    total_parameters_billions: float = 0.0
     total_size_mb: float = 0.0
-    total_size_gb: float = 0.0
+
+    @computed_field
+    @property
+    def total_parameters_millions(self) -> float:
+        return round(self.total_parameters / 1_000_000, 2)
+
+    @computed_field
+    @property
+    def total_parameters_billions(self) -> float:
+        return round(self.total_parameters / 1_000_000_000, 3)
+
+    @computed_field
+    @property
+    def total_size_gb(self) -> float:
+        return round(self.total_size_mb / 1024, 3)
 
 
 class WeightsAnalysis(BaseModel):
